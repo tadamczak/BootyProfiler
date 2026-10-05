@@ -163,6 +163,9 @@ function P.Modules.Performance.CreateLiveMonitor(backend,options)
     frame:SetScript("OnShow",Shown)
     frame:SetScript("OnHide",function() backend.SetVisible(false) end)
     UI.Window.StyleProjectDialog(frame)
+    if UI.WindowStack then
+        UI.WindowStack.SetOwner(frame,function() return P.host and P.host.window end)
+    end
     frame:SetScript("OnDragStop",function() frame:StopMovingOrSizing();RememberPosition() end)
     frame.resizeGrip=UI.CreateResizeGrip(frame)
     UI.AttachTooltip(frame.resizeGrip,"Resize Live Monitor","Drag to change the window size.")
