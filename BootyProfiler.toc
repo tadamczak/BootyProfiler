@@ -1,0 +1,33 @@
+## Interface: 11200
+## Title: BootyProfiler
+## Notes: On-demand profiling, live monitoring and login analysis. Standalone or integrated with Booty Suite.
+## Author: Bootybaker
+## Version: 1.0.0-dev.1
+## Dependencies: BootyLib
+## SavedVariables: BootyProfilerDB
+## LoadWith: AddOnOrganizer, AnimationGroup, Atlas-CFM, Auctioneer, AuctionLink, BetterCharacterStats, BigWigs
+## LoadWith: Blizzard_AuctionUI, Blizzard_BattlefieldMinimap, Blizzard_BindingUI, Blizzard_CombatText, Blizzard_CraftUI, Blizzard_GMSurveyUI, Blizzard_InspectUI
+## LoadWith: Blizzard_MacroUI, Blizzard_RaidUI, Blizzard_TalentUI, Blizzard_TradeSkillUI, Blizzard_TrainerUI, BootyAI, CThunWarner, Decouple
+## LoadWith: DiscordActionBars, DiscordActionBarsOptions, DiscordLibrary, DoiteAuras, EnhTooltip, GentleGC, HonorKillCount, Interact
+## LoadWith: LunaUnitFrames, MinimapButtonFrame, MinimapButtonFrameFu, MuklaClassicSkin, nampowersettings, perfboostsettings, pfDebug, pfQuest, pfQuest-turtle, Rabuffs
+## LoadWith: RogueFocus, ShaguDPS, ShaguPlates, ShaguScan, ShaguTweaks, SimpleActionSets, sorgis_raid_marks, Stubby, SuperAPI, SuperCleveRoidMacros
+## LoadWith: SuperMacro, TrinketMenu, Turtle_General, Turtle_GroupUI, TurtleMail, TWThreat, UnitXP_SP3_Addon, VCB
+## LoadWith: BootyGuild, BootyRaider, BootySuite
+
+Core\Bootstrap.lua
+Core\FunctionSource.lua
+Core\CallbackFamilies.lua
+Core\Health.lua
+Core\HealthReport.lua
+Core\Engine.lua
+Core\LiveMonitor.lua
+Core\Callbacks.lua
+Core\Runtime.lua
+Core\LoginMemory.lua
+Core\Settings.lua
+Services\ProfilerResultsService.lua
+Services\ProfilerAddonService.lua
+Core\ProfilerBridge.lua
+Modules\PerformanceLiveMonitor.lua
+Modules\Performance.lua
+BootyProfiler.lua
