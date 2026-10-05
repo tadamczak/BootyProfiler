@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0-dev.4 — 2026-10-06
+
+- Add Profile Action Bars to measure its event handler and native cooldown callbacks with all scoped counters retained in exports.
+- Record initial/final bar state and capture limits; install measurement hooks only during recording and restore them at Stop.
+
 ## 1.0.0-dev.3 — 2026-10-05
 
 - Keep the standalone Profiler, Settings and Live Monitor in the shared window order.

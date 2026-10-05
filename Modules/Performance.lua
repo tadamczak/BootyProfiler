@@ -40,6 +40,20 @@ local function CompareHeapRise(a,b)
     if (a.heapRise or 0)==(b.heapRise or 0) then return a.name<b.name end
     return (a.heapRise or 0)>(b.heapRise or 0)
 end
+Performance.Profiles={}
+function Performance.Profiles.IsTab(tab) return tab=="MOS" or tab=="All Addons" or tab=="Action Bars" end
+function Performance.Profiles.IsAvailable(provider)
+    return provider and type(provider.HasActionBarsCapture)=="function" and provider.HasActionBarsCapture() and true or false
+end
+function Performance.Profiles.Matches(session,tab,standalone)
+    if not session or not Performance.Profiles.IsTab(tab) then return false end
+    if (tab=="All Addons")~=(session.callbacksRequested and true or false) then return false end
+    local expected="Booty"
+    if tab=="Action Bars" then expected="Action Bars" elseif standalone then expected=false end
+    if tab=="Action Bars" then return session.sourceName==expected end
+    -- Older Booty reports did not identify their selected-operation source.
+    return session.sourceName==nil or session.sourceName==expected or tab=="MOS" and session.sourceName=="MOS"
+end
 local rowColor = {1,1,1}
 local sectionColor={0.015,0.015,0.015}
 local healthColors={{0.72,0.72,0.72},{0.45,0.85,0.45},{1,0.78,0.25},{1,0.35,0.25}}
@@ -47,6 +61,9 @@ local emptyEntries = {}
 local FAMILY_PAGE_SIZE=50
 local tables = {
     operations = { first = "Operation", columns = {"Calls","Total","Average","Peak","Heap delta"}, minimum = 760, nameFraction = 0.34 },
+    actionBarsOperations = { first = "Entry point", columns = {"Calls","Self","Average self","Peak self"}, minimum = 680, nameFraction = 0.38,
+        hints={Self="Time excluding nested watched Action Bars entry points. Ordinary helpers and observer overhead stay included.",
+            ["Average self"]="Average self time across valid timed calls.",["Peak self"]="Longest measured self time for one call; excludes nested watched entry points."} },
     slow = { first = "Operation", columns = {"At","Duration","Heap delta","Event"}, minimum = 680, nameFraction = 0.34 },
     memory = { first = "Addon", columns = {"Memory"}, minimum = 300, nameFraction = 0.70 },
     memoryActivity = { first = "Source addon", columns = {"Calls","Heap growth","Net heap delta","Peak growth"}, minimum = 680, nameFraction = 0.34 },
@@ -91,6 +108,7 @@ local columnHints={
 }
 local firstHints={
     operations="Selected Booty operation being measured.",slow="Selected Booty operation that reached the slow-call threshold.",
+    actionBarsOperations="Explicit BootyActionBars entry point. A zero-call row means this registered entry point was not invoked during the recording.",
     callbacks="Addon identified by the script's file. Unknown owner means the file could not be identified.",
     callbackDetails="Related frame scripts grouped together. Expand to see them; a family is not an addon.",
     callbackSlow="Frame script that reached the slow-call threshold.",memory="Addon named by the native memory API.",
@@ -113,6 +131,8 @@ local hints = {
 }
 local sections = {
     operations={title="Booty operations",hint=hints.total,intro="Selected Booty work, ranked by measured time. High Total means repeated Lua work; a large Peak can delay a frame."},
+    actionBarsOperations={title="Action Bars operations",expanded=true,hint="Selected BootyActionBars entry points; self time excludes nested watched targets.",intro="Self time excludes nested watched entry points. Ordinary helpers and observer overhead remain included. This is not total addon CPU. Zero-call entry points remain visible."},
+    actionBarsCoverage={title="Action Bars capture",expanded=true,hint="Recorded activation, coverage and measurement failures."},
     slow={title="Slow Booty calls",hint=hints.slow,intro="Recent Booty calls lasting at least 5 ms. Large peaks can delay a frame; use the time and event to locate expensive work."},
     callbacks={title="Addon source ranking",hint=hints.source,intro="Recorded work grouped by the addon file it came from. More time means more Lua processing, which can reduce FPS. Some sources cannot be identified."},
     callbackDetails={title="Frame callbacks",hint="Frame scripts grouped by name or parent. A family is not an addon.",intro="Recorded frame scripts grouped into families. Expand to find frequent work or slow calls that may reduce FPS; the frame name does not identify its addon."},
@@ -129,7 +149,7 @@ local sections = {
     heapDrops={title="Heap drop windows",nested=true,hint="Memory decreases between readings and frame pauses in those intervals. This does not prove cleanup caused a pause."},
     frameGaps={title="Other slow frame gaps",nested=true,hint="Pauses of at least 50 ms not already shown with memory drops. The cause can be game, addon or profiler work."},
 }
-local sectionIcons={operations="performance",slow="stop",callbacks="guild_stats",callbackDetails="groups",callbackSlow="stop",memory="memory",loginMemory="analyze",technical="info",technicalTiming="monitor",technicalCoverage="groups",technicalSources="list",technicalHealth="health",technicalSupport="settings",memoryGC="memory",heapDrops="memory",frameGaps="stop"}
+local sectionIcons={operations="performance",actionBarsOperations="list",actionBarsCoverage="info",slow="stop",callbacks="guild_stats",callbackDetails="groups",callbackSlow="stop",memory="memory",loginMemory="analyze",technical="info",technicalTiming="monitor",technicalCoverage="groups",technicalSources="list",technicalHealth="health",technicalSupport="settings",memoryGC="memory",heapDrops="memory",frameGaps="stop"}
 for name,key in pairs(sectionIcons) do sections[name].icon=key end
 local liveValues={"calls","count","time","selfTime","timedCalls","peak","failures","memory","maxTime","maxMemory","heapSamples","heapRise","heapDelta","heapPeak","heapUnsupportedCalls"}
 local function ShortSource(value)
@@ -171,6 +191,17 @@ function Performance.Create(parent,options)
     page.message = UI.CreateLabel(page.messageHost, nil, "OVERLAY", "GameFontHighlight")
     page.message:SetJustifyH("CENTER");page.message:SetJustifyV("MIDDLE");if page.message.SetWordWrap then page.message:SetWordWrap(true) end
     local module = { frame = page, items = {}, rows = {}, sessionEntries = {}, callbackEntries = {}, callbackDetails = {}, memoryEntries = {}, metricFlow = {}, detailsExpanded = {}, sectionState = {}, snapshots = {}, familyPages = {}, familyPage = 1, callbackView = options.measureMemory and "memory" or "time", measureMemory = options.measureMemory and true or false, loginPage = 1, loginPaging = {}, tableViews={}, tableSorts={}, tableFilters={}, tableRevision=0 }
+    function module:HasActionBarsCapture() return Performance.Profiles.IsAvailable(self.provider or P) end
+    function module:MatchesSession(session) return Performance.Profiles.Matches(session,self.tab,options.standalone) end
+    function module:HasCaptureConflict()
+        local state=self.provider and self.provider.GetState()
+        return state and state.recording and Performance.Profiles.IsTab(self.tab) and not self:MatchesSession(state.session) and true or false
+    end
+    function module:HasForeignProfileSession()
+        local provider=self.provider or P
+        local state=provider and provider.GetState()
+        return state and state.session and Performance.Profiles.IsTab(self.tab) and not self:MatchesSession(state.session) and true or false
+    end
     function module:GetRows(schema,entries,key,noSort,noFilter)
         local state=not noSort and self.tableSorts[schema]
         local filtered=not noFilter and self.tableFilters[schema] or false
@@ -263,9 +294,10 @@ function Performance.Create(parent,options)
                 if entry.name then snapshot.byName[entry.name]=row end
             end
         elseif not history then
-            local updates=name=="operations" and entries or snapshot.bindings
+            local operations=name=="operations" or name=="actionBarsOperations"
+            local updates=operations and entries or snapshot.bindings
             for index,entry in ipairs(updates) do
-                local row=name=="operations" and snapshot.byName[entry.name] or snapshot.rows[index]
+                local row=operations and snapshot.byName[entry.name] or snapshot.rows[index]
                 if row then for _,field in ipairs(liveValues) do row[field]=entry[field] end end
             end
         end
@@ -295,25 +327,27 @@ function Performance.Create(parent,options)
     function module:GetSessionOperations()
         local state = self.provider and self.provider.GetState()
         local operations = state and state.session and state.session.operations or self.operationScope and self.operationScope.operations
-        local entries, count, calls, total, heap, largest, slowestTime, slowest = self.sessionEntries, 0, 0, 0, 0, 0, 0, nil
+        local entries, count, calls, total, heap, largest, slowestTime, slowest, timed = self.sessionEntries, 0, 0, 0, 0, 0, 0, nil, 0
         local name, operation
         if operations then
         for name, operation in pairs(operations) do
             calls, total, heap = calls + (operation.count or 0), total + (operation.time or 0), heap + (operation.memory or 0)
+            timed=timed+(operation.timedCalls or operation.count or 0)
             if (operation.maxMemory or 0) > largest then largest = operation.maxMemory end
             if (operation.maxTime or 0) > slowestTime then slowestTime, slowest = operation.maxTime, name end
             if count < 128 then
                 count = count + 1
                 local entry = entries[count]
                 if not entry then entry = {}; table.insert(entries, entry) end
-                entry.name, entry.count, entry.time, entry.memory = name, operation.count or 0, operation.time or 0, operation.memory or 0
+                entry.name, entry.count, entry.time, entry.memory = name, operation.count or 0, operation.time or 0, operation.memory
                 entry.maxTime, entry.maxMemory = operation.maxTime or 0, operation.maxMemory or 0
+                entry.timedCalls,entry.failures=operation.timedCalls,operation.failures
             end
         end
         end
         for index = table.getn(entries), count + 1, -1 do table.remove(entries, index) end
         table.sort(entries, CompareTime)
-        return calls, total, heap, largest, slowest, entries, slowestTime
+        return calls, total, heap, largest, slowest, entries, slowestTime, timed
     end
 
     function module:CancelFamilyJob()
@@ -653,6 +687,55 @@ function Performance.Create(parent,options)
         end
     end
 
+    local function StateValue(value)
+        if value==true then return "Yes" elseif value==false then return "No" end
+        return value~=nil and tostring(value) or "Unavailable"
+    end
+    local function AddCapturedState(label,captured)
+        local fields={{"Active","active"},{"Requested","requested"},{"Event subscriptions","subscribed"},
+            {"Frames initialized","framesInitialized"},{"Product stopped","runtimeStopped"},{"Setting enabled","settingsEnabled"}}
+        for _,field in ipairs(fields) do AddDiagnostic(label..": "..field[1],StateValue(captured and captured[field[2]]),"Product state recorded at the capture boundary; this is not a live frame inspection.") end
+    end
+    function module:BuildActionBarsItems(session)
+        local calls,total,_,_,_,entries,peak,timed=self:GetSessionOperations()
+        local measured=calls==0 or timed>0
+        AddMetric("Measured calls",calls,"Calls to registered BootyActionBars entry points. This is not every addon or client call.")
+        AddMetric("Timed calls",timed,"Calls with a valid measured duration. Missing timings remain counted separately.")
+        AddMetric("Measured self time",measured and Duration(total) or "Unavailable","Time excluding nested watched entry points, including ordinary helpers and observer overhead; not total addon CPU.")
+        AddMetric("Average self time",measured and Duration(timed>0 and total/timed or 0) or "Unavailable","Average self time across calls with valid timings.")
+        AddMetric("Peak self time",measured and Duration(peak) or "Unavailable","Longest measured self time; excludes nested watched entry points.")
+        AddMetric("Average FPS",FPS(session.averageFps),hints.fps)
+        AddMetric("FPS min / max",FPS(session.minFps).." / "..FPS(session.maxFps),"Sampled once per second. These game-wide readings do not establish causal addon impact.")
+        local heap=session.endHeap or session.heap
+        AddMetric("Shared Lua heap",Memory(heap),hints.lua)
+        AddMetric("Change since Start",type(heap)=="number" and type(session.startHeap)=="number" and SignedMemory(heap-session.startHeap) or "Unavailable",hints.heap)
+        AddItem("message","Per-call memory is not measured in this profile. Shared Lua heap includes every addon and the UI.")
+        if AddSection("actionBarsOperations",table.getn(entries)) then
+            local rows=self:GetRows("actionBarsOperations",self:SnapshotRows("actionBarsOperations",entries,session,false))
+            AddTable("actionBarsOperations",true)
+            for _,entry in ipairs(rows) do AddItem("actionBarsOperation",entry.name,entry,nil,"Explicitly registered entry point. Self time excludes nested watched targets; ordinary helpers and observer overhead remain included. No per-call memory measurement.") end
+        end
+        if AddSection("actionBarsCoverage") then
+            local metadata=session.profileMetadata or emptyEntries
+            AddDiagnostic("Coverage",metadata.coverage or session.coverage,"Only explicitly registered Action Bars entry points are timed. Native work and unrelated callbacks are outside this scope.")
+            AddDiagnostic("Timing clock",ClockName(metadata.clock),"Clock reported by the selected-operation observer; separate from the session timeline clock.")
+            AddDiagnostic("Product version",metadata.productVersion or metadata.start and metadata.start.productVersion,"Version recorded by the Action Bars source.")
+            AddDiagnostic("Registered entry points",metadata.targetCount or metadata.start and metadata.start.targetCount or table.getn(entries),"The bounded set registered for this capture. Zero-call entries remain in the table.")
+            AddCapturedState("Start",metadata.start)
+            if session.stopped then AddCapturedState("Stop",metadata["end"]) end
+            for _,field in ipairs({{"Clock read failures","clockReadFailures"},{"Clock probe failures","clockProbeFailures"},{"Invalid timings","timingFailures"},
+                {"Observer failures","observerFailures"},{"Restore failures","restoreFailures"},{"Replaced targets","replacedTargets"},{"Depth-skipped calls","depthSkipped"}}) do
+                AddDiagnostic(field[1],StateValue(metadata[field[2]]),"Recorded observer coverage or cleanup failures. Invalid timings do not contribute to duration totals.")
+            end
+            AddDiagnostic("Partial coverage",StateValue(metadata.partial),"Whether the source reported incomplete capture or cleanup coverage.")
+            AddDiagnostic("Targets changed",StateValue(metadata.targetsChanged),"Whether the source reported that its registered target set changed during the capture.")
+            if session.stopped then
+                AddDiagnostic("Wrappers restored",StateValue(metadata.restored),"Whether the source restored its temporary wrappers after Stop.")
+                AddDiagnostic("Restoration blocked",StateValue(metadata.restorationBlocked),"A replaced entry point may prevent safe restoration; the profiler does not overwrite a foreign replacement.")
+            end
+        end
+        self.contentIndent=0
+    end
     function module:BuildItems()
         self.itemCount=0;self.contentIndent=0
         local state=self.provider.GetState()
@@ -679,7 +762,7 @@ function Performance.Create(parent,options)
             for index=table.getn(self.items),1,-1 do table.remove(self.items,index) end
             return
         end
-        local compatible=session and (self.tab=="MOS" and not session.callbacksRequested or self.tab=="All Addons" and session.callbacksRequested)
+        local compatible=self:MatchesSession(session)
         local health=compatible and session.health
         local healthHint=health and health.reason or "Start this profile to check FPS, latency and memory."
         if health and session.stopped then healthHint="Recorded result. "..healthHint end
@@ -688,6 +771,10 @@ function Performance.Create(parent,options)
             for index=table.getn(self.sessionEntries),1,-1 do table.remove(self.sessionEntries,index) end
             for index=table.getn(self.historyEntries or emptyEntries),1,-1 do table.remove(self.historyEntries,index) end
             AddItem("message","Press Start, use the addon, then Stop to inspect results.")
+        elseif not compatible then
+            AddItem("message",state.recording and "Another profile is recording. Stop it before starting this profile." or "No scan for this profile. Press Start to record it.")
+        elseif self.tab=="Action Bars" then
+            self:BuildActionBarsItems(session)
         elseif self.tab=="MOS" then
             local calls,total,heap,_,_,entries,peak=self:GetSessionOperations()
             AddMetric("Measured calls",calls,hints.calls);AddMetric("Measured time",Duration(total),hints.total)
@@ -715,7 +802,7 @@ function Performance.Create(parent,options)
         if self.tab=="All Addons" and (not session or session.callbacksRequested) then
             self:BuildAddonMemoryItems(session,state)
         end
-        if session and (self.tab=="MOS" or session.callbacksRequested) and AddSection("technical") then self:BuildTechnicalItems(session) end
+        if compatible and self.tab~="Action Bars" and (self.tab=="MOS" or session.callbacksRequested) and AddSection("technical") then self:BuildTechnicalItems(session) end
         for index=table.getn(self.items),self.itemCount+1,-1 do table.remove(self.items,index) end
     end
     local function EnsureRow(index)
@@ -828,10 +915,17 @@ function Performance.Create(parent,options)
             row.label:SetText(item.text..(sort and sort.column==1 and (sort.descending and " v" or " ^") or ""))
             for index=1,count do SetValue(row,index,schema.columns[index]..(sort and sort.column==index+1 and (sort.descending and " v" or " ^") or "")) end
         elseif item.kind=="diagnostic" then SetValue(row,1,item.value)
+        elseif item.kind=="actionBarsOperation" then
+            local data=item.operation
+            SetValue(row,1,data.count or 0)
+            for index=2,4 do
+                local value=Results.Value("actionBarsOperations",index+1,data)
+                SetValue(row,index,value~=nil and Duration(value) or "-")
+            end
         elseif item.kind=="operation" then
             local data=item.operation
             SetValue(row,1,data.count);SetValue(row,2,Duration(data.time));SetValue(row,3,Duration(data.count>0 and data.time/data.count or 0))
-            SetValue(row,4,Duration(data.maxTime));SetValue(row,5,Memory(data.memory))
+            SetValue(row,4,Duration(data.maxTime));SetValue(row,5,data.memory~=nil and Memory(data.memory) or "-")
         elseif item.kind=="slow" then
             local data=item.operation
             SetValue(row,1,string.format("+%.1f s",data.at));SetValue(row,2,Duration(data.elapsed));SetValue(row,3,Memory(data.heapChange));SetValue(row,4,data.event or "-")
@@ -960,7 +1054,7 @@ function Performance.Create(parent,options)
                 if item.kind=="tableFilter" then height=module:MeasureFilter(row,item,rowWidth)
                 elseif item.kind=="tableHeader" then schema=item.operation;stripe=0;height=MeasureTableRow(row,item,schema,rowWidth,0)
                 elseif item.kind=="diagnostic" then stripe=stripe+1;height=MeasureTableRow(row,item,tables.diagnostic,rowWidth,stripe)
-                elseif item.kind=="operation" or item.kind=="slow" or item.kind=="memory" or item.kind=="memoryActivity" or item.kind=="loginMemory" or item.kind=="callback" or item.kind=="callbackDetail" or item.kind=="callbackSlow" or item.kind=="family" or item.kind=="heapDrop" or item.kind=="frameGap" then
+                elseif item.kind=="operation" or item.kind=="actionBarsOperation" or item.kind=="slow" or item.kind=="memory" or item.kind=="memoryActivity" or item.kind=="loginMemory" or item.kind=="callback" or item.kind=="callbackDetail" or item.kind=="callbackSlow" or item.kind=="family" or item.kind=="heapDrop" or item.kind=="frameGap" then
                     stripe=stripe+1;height=MeasureTableRow(row,item,schema,rowWidth,stripe)
                 elseif item.kind=="familyPager" or item.kind=="loginPager" then height=MeasurePager(row,item,rowWidth)
                 elseif item.kind=="healthDetail" then
@@ -1012,6 +1106,30 @@ function Performance.Create(parent,options)
         return y+8
     end
 
+    local function ProfileClick() module:SelectTab(this.profile) end
+    local function CreateProfileOption(profile)
+        local option=UI.CreateButton(page.advancedMenu,nil,profile[1],182,26);UI.StyleActionButton(option)
+        option.profile=profile[2];option:SetScript("OnClick",ProfileClick)
+        option.mosActionAlign="LEFT";option.mosLabelJustify="LEFT";if option.label.SetWordWrap then option.label:SetWordWrap(false) end
+        UI.SetActionButtonIcon(option,profile[3]);return option
+    end
+    function module:UpdateProfileMenu()
+        if not page.advancedMenu then return end
+        local available=self:HasActionBarsCapture()
+        if available and not page.actionBarsProfileOption then
+            local option=CreateProfileOption({"Profile Action Bars","Action Bars","list"})
+            page.actionBarsProfileOption=option
+            table.insert(page.advancedMenu.options,table.getn(page.advancedMenu.options),option)
+        end
+        local count=0
+        for _,option in ipairs(page.advancedMenu.options) do
+            if option.profile~="Action Bars" or available then
+                option:ClearAllPoints();option:SetPoint("TOPLEFT",page.advancedMenu,"TOPLEFT",4,-4-count*30)
+                option:Show();count=count+1
+            else option:Hide() end
+        end
+        page.advancedMenu:SetHeight(6+count*30)
+    end
     function module:EnsureUI()
         if page.controls then return end
         page.tabs=UI.CreateToolbarSurface(page.header,true,true);page.controls=UI.CreateToolbarSurface(page.header,false,true)
@@ -1041,15 +1159,15 @@ function Performance.Create(parent,options)
             or {{"Profile Booty","MOS","guild_stats"},{"Profile All","All Addons","groups"},{"Analyze Login","Analyze Login","analyze"}}
         page.advancedMenu=UI.CreateDropdownPanel(page.tabs,page.advancedButton,190,6+table.getn(profiles)*30)
         for index,profile in ipairs(profiles) do
-            local option=UI.CreateButton(page.advancedMenu,nil,profile[1],182,26);UI.StyleActionButton(option)
+            local option=CreateProfileOption(profile)
             option:SetPoint("TOPLEFT",page.advancedMenu,"TOPLEFT",4,-4-(index-1)*30)
-            option.profile=profile[2];option:SetScript("OnClick",function() module:SelectTab(this.profile) end)
-            option.mosActionAlign="LEFT";option.mosLabelJustify="LEFT";if option.label.SetWordWrap then option.label:SetWordWrap(false) end
-            UI.SetActionButtonIcon(option,profile[3]);table.insert(page.advancedMenu.options,option)
+            table.insert(page.advancedMenu.options,option)
         end
+        self:UpdateProfileMenu()
         local menuShown=page.advancedMenu:GetScript("OnShow")
         page.advancedMenu:SetScript("OnShow",function()
             if menuShown then menuShown() end
+            module:UpdateProfileMenu()
             for _,option in ipairs(page.advancedMenu.options) do UI.FitButtonLabel(option,option:GetWidth()-16) end
         end)
         page.backgroundHost=UI.CreateContainer(nil,page);page.backgroundHost:EnableMouse(false)
@@ -1181,8 +1299,8 @@ function Performance.Create(parent,options)
             for _,toggle in pairs(page.sectionToggles) do toggle:Hide() end
             page.controls:Hide();page.status:Hide();self:Layout();return
         end
-        local profileView=self.tab=="MOS" or self.tab=="All Addons"
-        self.captureConflict=profileView and state.recording and state.session and ((self.tab=="All Addons")~=(state.session.callbacksRequested and true or false)) or false
+        local profileView=Performance.Profiles.IsTab(self.tab)
+        self.captureConflict=self:HasCaptureConflict()
         if self.captureConflict then
             self:CancelFamilyJob()
             page.message:SetText("Another profile is recording. Stop it before starting this profile.");page.message:Show()
@@ -1211,7 +1329,8 @@ function Performance.Create(parent,options)
         UI.SetActionButtonIcon(page.startButton,state.recording and "stop" or "start")
         local pendingDisable=self.addonStatus and self.addonStatus.reloadRequired and self.addonStatus.pendingEnabled==false
         UI.SetButtonEnabled(page.startButton,not pendingDisable)
-        UI.SetButtonEnabled(page.resetButton,state.session~=nil);UI.SetButtonEnabled(page.exportButton,state.session~=nil and not state.recording)
+        local foreignSession=self:HasForeignProfileSession()
+        UI.SetButtonEnabled(page.resetButton,state.session~=nil and not foreignSession);UI.SetButtonEnabled(page.exportButton,state.session~=nil and not state.recording and not foreignSession)
         UI.SetButtonEnabled(page.refreshButton,state.session~=nil or login and login.GetReport()~=nil)
         UI.SetButtonEnabled(page.memoryButton,not pendingDisable and self.tab=="All Addons" and memorySupported~=false)
         page.memoryModeButton:SetText(self.measureMemory and "Memory: ON" or "Memory: OFF")
@@ -1229,7 +1348,7 @@ function Performance.Create(parent,options)
             local report=login and login.GetReport()
             detail=report and (report.kind=="recording" and "Recording..." or "Last scan: "..ScanDate(report.capturedDate)..", "..ScanSeconds(report.elapsed)) or login and login.IsArmed() and "Ready for next reload" or "No login scan"
         elseif self.captureConflict then detail="Another profile is recording"
-        elseif capture and self.tab=="All Addons" and not capture.callbacksRequested then
+        elseif capture and profileView and not self:MatchesSession(capture) then
             detail=state.recording and "Another profile is recording" or "No scan for this profile"
         elseif capture then
             detail=state.recording and "Recording... "..ScanSeconds(capture.elapsed) or "Last scan: "..ScanDate(capture.capturedDate)..", "..ScanSeconds(capture.elapsed)
@@ -1256,9 +1375,10 @@ function Performance.Create(parent,options)
     function module:SelectTab(tab)
         if tab=="Booty" then tab="MOS" end
         if options.standalone and tab=="MOS" then return false end
-        if tab~="MOS" and tab~="All Addons" and tab~="Analyze Login" and tab~="Health Check" then return false end
+        if tab=="Action Bars" and not self:HasActionBarsCapture() then return false end
+        if not Performance.Profiles.IsTab(tab) and tab~="Analyze Login" and tab~="Health Check" then return false end
         self:ClearTableViews();self:CancelFamilyJob();self.familyModel=nil;self.tab=tab
-        if tab=="MOS" or tab=="All Addons" then self.lastProfile=tab end
+        if Performance.Profiles.IsTab(tab) then self.lastProfile=tab end
         self.sectionState={};self.detailsExpanded={};self.expandedFamily=nil;self.familyPages={};self.familyPage=1
         if page.advancedMenu then page.advancedMenu:Hide() end
         page.canvas.layoutViewport:SetVerticalScroll(0);Subscribe();self:Refresh();return true
@@ -1368,20 +1488,21 @@ function Performance.Create(parent,options)
         for _,item in ipairs(self.items) do item.operation=nil end
     end
     function module:Start()
-        if self.captureConflict then return false end
-        if not self.provider or self.tab~="MOS" and self.tab~="All Addons" then return false end
+        if self:HasCaptureConflict() then return false end
+        if not self.provider or not Performance.Profiles.IsTab(self.tab) then return false end
+        if self.tab=="Action Bars" and not self:HasActionBarsCapture() then return false end
         if self.addonStatus and self.addonStatus.reloadRequired and self.addonStatus.pendingEnabled==false then return false end
         if not self.provider.GetState().enabled then self.provider.Enable(true) end
         local selectedSource="Booty"
-        if options.standalone then selectedSource=false end
-        local ok,message=self.provider.Start({callbacks=self.tab=="All Addons",memory=self.measureMemory,source=selectedSource})
+        if self.tab=="Action Bars" then selectedSource="Action Bars" elseif options.standalone then selectedSource=false end
+        local ok,message=self.provider.Start({callbacks=self.tab=="All Addons",memory=self.tab~="Action Bars" and self.measureMemory or false,source=selectedSource})
         if ok then self.familyPages={};self.familyPage=1;self.expandedFamily=nil end
         self.notice=message;self:Refresh();return ok
     end
-    function module:Stop() if self.captureConflict then return false end if self.provider then self.provider.Stop();self:Refresh() end end
-    function module:Reset() if self.captureConflict then return false end if self.provider then self:ClearTableViews();self.provider.Reset();self.familyPages={};self.familyPage=1;self.expandedFamily=nil;self.notice=nil;page.canvas.layoutViewport:SetVerticalScroll(0);self:Refresh() end end
+    function module:Stop() if self:HasCaptureConflict() then return false end if self.provider then local ok=self.provider.Stop();self:Refresh();return ok end end
+    function module:Reset() if self:HasForeignProfileSession() then return false end if self.provider then self:ClearTableViews();self.provider.Reset();self.familyPages={};self.familyPage=1;self.expandedFamily=nil;self.notice=nil;page.canvas.layoutViewport:SetVerticalScroll(0);self:Refresh() end end
     function module:Export()
-        if self.captureConflict then return false end
+        if self:HasForeignProfileSession() then return false end
         local result,message=self.provider.Export()
         self.notice=result and "Report exported; reload or logout writes it to disk." or message
         self:Refresh();return result
@@ -1414,13 +1535,15 @@ function Performance.Create(parent,options)
         local provider=bridge and bridge.Resolve()
         local state=provider and provider.GetState() or {}
         local ready=provider~=nil and not (status.reloadRequired and status.pendingEnabled==false)
+        local conflict=self:HasCaptureConflict()
+        local foreignSession=self:HasForeignProfileSession()
         return {
             installed=status.installed and true or false,loaded=status.loaded and true or false,ready=ready,
             toggleLabel=status.reloadRequired and "Reload UI" or status.loaded and "Disable" or "Enable",
             toggleEnabled=status.reloadRequired and status.canReload or status.loaded and status.canDisable or not status.loaded and status.canEnable or false,
-            recording=state.recording and true or false,startStopLabel=state.recording and "Stop" or "Start",startStopEnabled=ready,
-            resetEnabled=ready and state.session~=nil,exportEnabled=ready and state.session~=nil and not state.recording,
-            memory=self.measureMemory and true or false,memoryEnabled=ready and not state.recording,
+            recording=state.recording and true or false,startStopLabel=state.recording and "Stop" or "Start",startStopEnabled=ready and not conflict,
+            resetEnabled=ready and state.session~=nil and not foreignSession,exportEnabled=ready and state.session~=nil and not state.recording and not foreignSession,
+            memory=self.measureMemory and true or false,memoryEnabled=ready and not state.recording and self.tab~="Action Bars",
             liveEnabled=ready and provider.LiveMonitor~=nil and Performance.CreateLiveMonitor~=nil,
             healthEnabled=ready and provider.GetLastHealthReport~=nil,
         }
@@ -1434,16 +1557,16 @@ function Performance.Create(parent,options)
         self.provider=provider
         if action=="live" then return quick.liveEnabled and self:ToggleMonitor() or false end
         if action=="health" then return quick.healthEnabled and self:SelectTab("Health Check") or false end
-        if action=="startStop" or action=="reset" or action=="export" or action=="memory" then self.captureConflict=false end
         if action=="startStop" then
+            if not quick.startStopEnabled then return false end
             if provider.GetState().recording then self:Stop();return true end
             local profile=self.lastProfile
             if not profile then
                 local session=provider.GetState().session
-                profile=session and (session.callbacksRequested and "All Addons" or "MOS") or "All Addons"
+                profile=session and (session.sourceName=="Action Bars" and "Action Bars" or session.callbacksRequested and "All Addons" or "MOS") or "All Addons"
             end
-            if options.standalone then profile="All Addons" end
-            self:SelectTab(profile)
+            if options.standalone and profile~="Action Bars" then profile="All Addons" end
+            if not self:SelectTab(profile) then return false end
             return self:Start()
         end
         if action=="reset" then if quick.resetEnabled then self:Reset();return true end;return false end

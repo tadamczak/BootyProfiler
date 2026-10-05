@@ -215,6 +215,7 @@ function P.Start(options)
         slowThreshold = 0.005, source = source, sourceName = sourceName, handle = handle, operations = handle and handle.operations or {},
         clock = "GetTime", clockResolution = "not verified in this client", coverage = source and "Selected " .. tostring(sourceName) .. " entry points; nested calls counted once." or "No selected-operation source; intercepted frame callbacks only.",
         callbacksRequested = callbacksRequested,
+        profileMetadata = handle and handle.metadata,
         callbackMemoryRequested = callbackMemoryRequested,
         allAddonsCoverage = callbacksRequested and "Intercepted frame OnEvent/OnUpdate callbacks, global Lua heap and sampled FPS/latency. This is not total addon CPU or causal FPS attribution."
             or "Global Lua heap and sampled FPS/latency. Start from All Addons to also intercept frame callbacks." }
@@ -255,7 +256,11 @@ function P.Stop()
         end
     end
     local ok, failure = true, nil
-    if session.source then ok, failure = pcall(session.source.stop, session.handle) end
+    if session.source then
+        local stopped, result, reason = pcall(session.source.stop, session.handle)
+        ok = stopped and result ~= false
+        if not ok then failure = stopped and (reason or "Profiling source cleanup failed.") or result end
+    end
     session.elapsed = math.max(session.elapsed, (Now() or session.startedAt) - session.startedAt)
     local heap, threshold, valid = ReadHeap()
     if valid then session.heap, session.gcThreshold = heap, threshold end
@@ -401,6 +406,13 @@ function P.Export()
         for index = 1, session.frameGaps.history.count do table.insert(result.frameGaps.history, CopyFields(P.HistoryEntry(session.frameGaps.history, index))) end
     end
     if session.capabilities then result.capabilities = CopyFields(session.capabilities) end
+    if type(session.profileMetadata) == "table" then
+        -- Capture state is durable evidence; target frames, owners and wrappers
+        -- stay transient. CopyFields retains scalar fields only.
+        result.profileMetadata = CopyFields(session.profileMetadata)
+        if type(session.profileMetadata.start) == "table" then result.profileMetadata.start = CopyFields(session.profileMetadata.start) end
+        if type(session.profileMetadata["end"]) == "table" then result.profileMetadata["end"] = CopyFields(session.profileMetadata["end"]) end
+    end
     if session.callbacks then
         local callbacks = session.callbacks
         result.callbacks = CopyFields(callbacks)
