@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0-dev.3 — 2026-10-05
+
+- Keep the standalone Profiler, Settings and Live Monitor in the shared window order.
+
 ## 1.0.0-dev.2 — 2026-10-05
 
 - Organize standalone Settings under Profile and Profiler using the shared library.
