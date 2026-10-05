@@ -2,6 +2,14 @@ local P = BootyProfiler
 local Bridge = {}
 P.Core.ProfilerBridge = Bridge
 local source = {}
+local actionBarsSource
+
+function Bridge.HasActionBarsCapture()
+    if type(BootyLib.GetProduct) ~= "function" or not P.Core.ProductCapture then return false end
+    local product = BootyLib.GetProduct("actionbars")
+    return type(product) == "table" and type(product.GetProfilingTargets) == "function"
+end
+P.HasActionBarsCapture = Bridge.HasActionBarsCapture
 
 function source.start(observer)
     local D = BootyLib.Diagnostics
@@ -31,6 +39,13 @@ end
 function Bridge.Connect(standalone)
     local provider, failure = Bridge.Resolve()
     if not provider then return nil, failure end
+    -- Registration is inert; target lookup waits for Start. A product loaded
+    -- after this window opened can then use the same optional source.
+    if not provider.GetState().recording and P.Core.ProductCapture then
+        if not actionBarsSource then actionBarsSource = P.Core.ProductCapture.Create() end
+        local ok, message = provider.RegisterSource("Action Bars", actionBarsSource)
+        if not ok then return nil, message end
+    end
     if not standalone and not provider.GetState().recording then
         local D = BootyLib.Diagnostics
         if not D or not D.BeginScope or not D.SetSampleObserver then return nil, "Booty diagnostics are unavailable." end
@@ -70,6 +85,7 @@ function Bridge.ReloadUI() return P.Services.ProfilerAddon.Reload() end
 function Bridge.Create(standalone)
     return { Resolve = Bridge.Resolve,
         Connect = function() return Bridge.Connect(standalone) end,
+        HasActionBarsCapture = Bridge.HasActionBarsCapture,
         GetAddonStatus = Bridge.GetAddonStatus, PrepareDisable = Bridge.PrepareDisable,
         SetAddonEnabled = Bridge.SetAddonEnabled, ReloadUI = Bridge.ReloadUI }
 end

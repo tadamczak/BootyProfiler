@@ -2,7 +2,7 @@
 ## Title: BootyProfiler
 ## Notes: On-demand profiling, live monitoring and login analysis. Standalone or integrated with Booty Suite.
 ## Author: Bootybaker
-## Version: 1.0.0-dev.3
+## Version: 1.0.0-dev.4
 ## Dependencies: BootyLib
 ## SavedVariables: BootyProfilerDB
 ## LoadWith: AddOnOrganizer, AnimationGroup, Atlas-CFM, Auctioneer, AuctionLink, BetterCharacterStats, BigWigs
@@ -25,6 +25,7 @@ Core\Callbacks.lua
 Core\Runtime.lua
 Core\LoginMemory.lua
 Core\Settings.lua
+Core\ProductCapture.lua
 Services\ProfilerResultsService.lua
 Services\ProfilerAddonService.lua
 Core\ProfilerBridge.lua

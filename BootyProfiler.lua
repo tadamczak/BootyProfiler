@@ -31,6 +31,7 @@ local function Action(host, name, show)
         if not controller then if host.Print then host.Print("Profiler view is unavailable.") end; return false end
         if name == "all" then return controller:SelectTab("All Addons") end
         if name == "booty" then return controller:SelectTab("Booty") end
+        if name == "actionbars" then return controller:SelectTab("Action Bars") end
         if name == "login" then return controller:SelectTab("Analyze Login") end
         return controller:ExecuteQuickAction(name)
     end
@@ -41,16 +42,23 @@ function Product.GetQuickMenu(host)
     local db = P.Core.Settings.Ensure()
     local memory = db.measureCallbackMemory
     if controller then memory = controller.measureMemory end
+    local conflict = controller and controller.HasCaptureConflict and controller:HasCaptureConflict() or false
+    local foreignSession = controller and controller.HasForeignProfileSession and controller:HasForeignProfileSession() or false
     local advanced = {
-        { text = state.recording and "Stop" or "Start", icon = state.recording and "stop" or "start", action = Action(host, "startStop") },
-        { text = "Reset", icon = "reset", enabled = state.session ~= nil, action = Action(host, "reset") },
-        { text = "Export", icon = "save", enabled = state.session ~= nil and not state.recording, action = Action(host, "export") },
-        { text = memory and "Memory: ON" or "Memory: OFF", icon = "memory", checked = memory and true or false,
-            enabled = not state.recording, keepOpen = true, action = Action(host, "memory") },
-        { text = "Profile All", icon = "groups", action = Action(host, "all", true) },
-        { text = "Analyze Login", icon = "analyze", action = Action(host, "login", true) },
+        { text = state.recording and "Stop" or "Start", icon = state.recording and "stop" or "start", enabled = not conflict, action = Action(host, "startStop") },
+        { text = "Reset", icon = "reset", enabled = state.session ~= nil and not foreignSession, action = Action(host, "reset") },
+        { text = "Export", icon = "save", enabled = state.session ~= nil and not state.recording and not foreignSession, action = Action(host, "export") },
     }
-    if not host.standalone then table.insert(advanced, 5, { text = "Profile Booty", icon = "guild_stats", action = Action(host, "booty", true) }) end
+    if not controller or controller.tab ~= "Action Bars" then
+        table.insert(advanced, { text = memory and "Memory: ON" or "Memory: OFF", icon = "memory", checked = memory and true or false,
+            enabled = not state.recording, keepOpen = true, action = Action(host, "memory") })
+    end
+    if not host.standalone then table.insert(advanced, { text = "Profile Booty", icon = "guild_stats", action = Action(host, "booty", true) }) end
+    table.insert(advanced, { text = "Profile All", icon = "groups", action = Action(host, "all", true) })
+    if type(P.HasActionBarsCapture) == "function" and P.HasActionBarsCapture() then
+        table.insert(advanced, { text = "Profile Action Bars", icon = "list", action = Action(host, "actionbars", true) })
+    end
+    table.insert(advanced, { text = "Analyze Login", icon = "analyze", action = Action(host, "login", true) })
     local items = {
         { text = "Live Monitor", icon = "monitor", enabled = P.LiveMonitor ~= nil, action = Action(host, "live") },
         { text = "Advanced Profiler", icon = "performance", children = advanced },
@@ -94,6 +102,7 @@ function Product.OnHostReady(host)
         if command == "settings" then return host.OpenSettings() end
         if command == "live" then return Action(host, "live")() end
         if command == "all" then return Action(host, "all", true)() end
+        if command == "actionbars" then return Action(host, "actionbars", true)() end
         if command == "login" then return Action(host, "login", true)() end
         if command == "health" then return Action(host, "health", true)() end
         return host.OpenView("profiler")

@@ -5,6 +5,7 @@ local Results={}
 P.Services.ProfilerResults=Results
 local fields={
     operations={"name","count","time","average","maxTime","memory"},
+    actionBarsOperations={"name","count","time","average","maxTime"},
     slow={"name","at","elapsed","heapChange","event"},
     memory={"name","memory"},memoryActivity={"name","calls","heapRise","heapDelta","heapPeak"},
     callbackMemory={"name","calls","heapRise","heapDelta","heapPeak","failures"},
@@ -22,6 +23,15 @@ end
 function Results.Value(schema,column,entry)
     local field=fields[schema] and fields[schema][column]
     if not field then return nil end
+    if schema=="actionBarsOperations" and (field=="time" or field=="average" or field=="maxTime") then
+        local calls=Number(entry.count) or 0
+        local timed=Number(entry.timedCalls)
+        if calls>0 and timed==0 then return nil end
+        if field=="average" then
+            local divisor=timed or calls
+            return divisor>0 and Number(entry.time) and Number(entry.time/divisor) or calls==0 and 0 or nil
+        end
+    end
     if field=="average" then return (entry.count or 0)>0 and Number(entry.time) and Number(entry.time/entry.count) or (entry.count or 0)==0 and 0 or nil end
     if field=="stage" then return entry.event=="ADDON_LOADED" and entry.addon and "Loaded: "..entry.addon or stages[entry.event] or entry.event end
     if field=="failed" then return entry.failed and 1 or 0 end
@@ -61,7 +71,7 @@ function Results.IsBaseGame(entry,schema)
     return type(owner)=="string" and string.find(string.lower(owner),"^blizzard_")~=nil or false
 end
 function Results.CanFilterAddons(schema)
-    return fields[schema]~=nil and schema~="heapDrops" and schema~="frameGaps"
+    return fields[schema]~=nil and schema~="heapDrops" and schema~="frameGaps" and schema~="actionBarsOperations"
 end
 function Results.IsAddonResult(entry,schema)
     if not Results.CanFilterAddons(schema) then return true end
