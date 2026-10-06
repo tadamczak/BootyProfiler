@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0-dev.8 — 2026-10-06
+
+- Explain that toggling action-bar titles, key labels or counts also changes the recording setup.
+
 ## 1.0.0-dev.7 — 2026-10-06
 
 - Explain that changing action-bar columns or spacing also changes the recording setup.
