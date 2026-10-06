@@ -730,7 +730,7 @@ function Performance.Create(parent,options)
             end
             AddDiagnostic("Partial coverage",StateValue(metadata.partial),"Whether the source reported incomplete capture or cleanup coverage.")
             AddDiagnostic("Targets changed",StateValue(metadata.targetsChanged),"Whether the source reported that its registered target set changed during the capture.")
-            AddDiagnostic("Bar setup changed",StateValue(metadata.configurationChanged),"Whether any bar was moved or scaled, or extra bars were added, removed or individually shown/hidden during recording. Finish editing the bars before starting a comparison.")
+            AddDiagnostic("Bar setup changed",StateValue(metadata.configurationChanged),"Whether any bar was moved or scaled, its columns or spacing changed, or extra bars were added, removed or individually shown/hidden during recording. Finish editing the bars before starting a comparison.")
             if session.stopped then
                 AddDiagnostic("Wrappers restored",StateValue(metadata.restored),"Whether the source restored its temporary wrappers after Stop.")
                 AddDiagnostic("Restoration blocked",StateValue(metadata.restorationBlocked),"A replaced entry point may prevent safe restoration; the profiler does not overwrite a foreign replacement.")
