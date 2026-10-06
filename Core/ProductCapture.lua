@@ -5,7 +5,7 @@ P.Core.ProductCapture = Capture
 local active, restorationBlocked
 local TARGET_LIMIT, MODEL_LIMIT, SLOW_THRESHOLD, STACK_LIMIT = 73, 72, 0.005, 64
 local StockAssert = assert
-local COVERAGE = "Explicit BootyActionBars event entry and existing main/custom cooldown OnUpdateModel scripts (up to 73 targets); self time excludes nested scoped targets, inclusive time retained separately. Not total addon CPU or owned memory; targets fixed at Start."
+local COVERAGE = "Explicit BootyActionBars event entry and existing main/custom cooldown OnUpdateModel scripts (up to 73 targets); pet and stance bars are excluded. Self time excludes nested scoped targets, inclusive time retained separately. Not total addon CPU or owned memory; targets fixed at Start."
 
 local function Finite(value)
     return type(value) == "number" and value == value and value > -1e300 and value < 1e300
@@ -37,6 +37,9 @@ local function Resolve()
         (descriptor.customActiveCount or 0) > (descriptor.customConfiguredCount or 0) then
         return nil, "Invalid BootyActionBars custom profiling state."
     end
+    if not OptionalInteger(descriptor.specialConfiguredCount, 2) then
+        return nil, "Invalid BootyActionBars special profiling state."
+    end
     return descriptor
 end
 local function Snapshot(descriptor)
@@ -45,7 +48,8 @@ local function Snapshot(descriptor)
         framesInitialized = descriptor.framesInitialized, targetCount = table.getn(descriptor.targets),
         customRevision = descriptor.customRevision or 0,
         customConfiguredCount = descriptor.customConfiguredCount or 0,
-        customActiveCount = descriptor.customActiveCount or 0}
+        customActiveCount = descriptor.customActiveCount or 0,
+        specialConfiguredCount = descriptor.specialConfiguredCount or 0}
     if type(descriptor.runtimeStopped) == "boolean" then result.runtimeStopped = descriptor.runtimeStopped end
     if type(descriptor.settingsEnabled) == "boolean" then result.settingsEnabled = descriptor.settingsEnabled end
     return result
@@ -257,7 +261,9 @@ local function Start(observer)
     local metadata = {start = Snapshot(descriptor), coverage = COVERAGE, clockResolution = "Not verified in this client; zero and invalid durations are reported.",
         clockReadFailures = 0, clockProbeFailures = 0, timingFailures = 0, observerFailures = 0, depthSkipped = 0,
         restoreFailures = 0, restoredTargets = 0, replacedTargets = 0, hookedTargets = 0,
-        partial = false, restored = false, restorationBlocked = false, memoryMeasured = false,
+        partial = (descriptor.specialConfiguredCount or 0) > 0,
+        excludedSpecialBars = (descriptor.specialConfiguredCount or 0) > 0,
+        restored = false, restorationBlocked = false, memoryMeasured = false,
         configurationChanged = false, targetsChanged = false}
     local clock, scale = SelectClock(metadata)
     if not clock then return nil, "Action bar profiling clock is unavailable." end
@@ -317,7 +323,11 @@ local function Stop(handle)
             handle.metadata.targetsChanged, handle.metadata.partial = true, true
         end
         local first, last = handle.metadata.start, handle.metadata["end"]
-        if first.customRevision ~= last.customRevision or first.customConfiguredCount ~= last.customConfiguredCount then
+        if last.specialConfiguredCount > 0 then
+            handle.metadata.excludedSpecialBars, handle.metadata.partial = true, true
+        end
+        if first.customRevision ~= last.customRevision or first.customConfiguredCount ~= last.customConfiguredCount or
+            first.specialConfiguredCount ~= last.specialConfiguredCount then
             handle.metadata.configurationChanged, handle.metadata.partial = true, true
         end
     else
