@@ -2,7 +2,7 @@
 ## Title: BootyProfiler
 ## Notes: On-demand profiling, live monitoring and login analysis. Standalone or integrated with Booty Suite.
 ## Author: Bootybaker
-## Version: 1.0.0-dev.5
+## Version: 1.0.0-dev.6
 ## Dependencies: BootyLib
 ## SavedVariables: BootyProfilerDB
 ## LoadWith: AddOnOrganizer, AnimationGroup, Atlas-CFM, Auctioneer, AuctionLink, BetterCharacterStats, BigWigs

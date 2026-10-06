@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0-dev.6 — 2026-10-06
+
+- Explain that moving or scaling any action bar changes the recording setup; finish layout editing before a comparison.
+
 ## 1.0.0-dev.5 — 2026-10-06
 
 - Include initialized custom action bars in Profile Action Bars, keeping disabled bars' zero counters in exports.
