@@ -3,12 +3,18 @@ local P = BootyProfiler
 local Capture = {}
 P.Core.ProductCapture = Capture
 local active, restorationBlocked
-local TARGET_LIMIT, MODEL_LIMIT, SLOW_THRESHOLD, STACK_LIMIT = 13, 12, 0.005, 64
+local TARGET_LIMIT, MODEL_LIMIT, SLOW_THRESHOLD, STACK_LIMIT = 73, 72, 0.005, 64
 local StockAssert = assert
-local COVERAGE = "Explicit BootyActionBars event entry and existing cooldown OnUpdateModel scripts; self time excludes nested scoped targets, inclusive time retained separately. Not total addon CPU or owned memory; targets fixed at Start."
+local COVERAGE = "Explicit BootyActionBars event entry and existing main/custom cooldown OnUpdateModel scripts (up to 73 targets); self time excludes nested scoped targets, inclusive time retained separately. Not total addon CPU or owned memory; targets fixed at Start."
 
 local function Finite(value)
     return type(value) == "number" and value == value and value > -1e300 and value < 1e300
+end
+local function Integer(value, limit)
+    return Finite(value) and value >= 0 and value <= limit and value == math.floor(value)
+end
+local function OptionalInteger(value, limit)
+    return value == nil or Integer(value, limit)
 end
 local function Resolve()
     if type(BootyLib) ~= "table" or type(BootyLib.GetProduct) ~= "function" then
@@ -26,12 +32,20 @@ local function Resolve()
     for _, key in ipairs({"active", "requested", "subscribed", "framesInitialized"}) do
         if type(descriptor[key]) ~= "boolean" then return nil, "Invalid BootyActionBars profiling state." end
     end
+    if not OptionalInteger(descriptor.customRevision, 9007199254740991) or
+        not OptionalInteger(descriptor.customConfiguredCount, 5) or not OptionalInteger(descriptor.customActiveCount, 5) or
+        (descriptor.customActiveCount or 0) > (descriptor.customConfiguredCount or 0) then
+        return nil, "Invalid BootyActionBars custom profiling state."
+    end
     return descriptor
 end
 local function Snapshot(descriptor)
     local result = {contractVersion = descriptor.contractVersion, productVersion = descriptor.productVersion,
         active = descriptor.active, requested = descriptor.requested, subscribed = descriptor.subscribed,
-        framesInitialized = descriptor.framesInitialized, targetCount = table.getn(descriptor.targets)}
+        framesInitialized = descriptor.framesInitialized, targetCount = table.getn(descriptor.targets),
+        customRevision = descriptor.customRevision or 0,
+        customConfiguredCount = descriptor.customConfiguredCount or 0,
+        customActiveCount = descriptor.customActiveCount or 0}
     if type(descriptor.runtimeStopped) == "boolean" then result.runtimeStopped = descriptor.runtimeStopped end
     if type(descriptor.settingsEnabled) == "boolean" then result.settingsEnabled = descriptor.settingsEnabled end
     return result
@@ -243,7 +257,8 @@ local function Start(observer)
     local metadata = {start = Snapshot(descriptor), coverage = COVERAGE, clockResolution = "Not verified in this client; zero and invalid durations are reported.",
         clockReadFailures = 0, clockProbeFailures = 0, timingFailures = 0, observerFailures = 0, depthSkipped = 0,
         restoreFailures = 0, restoredTargets = 0, replacedTargets = 0, hookedTargets = 0,
-        partial = false, restored = false, restorationBlocked = false, memoryMeasured = false}
+        partial = false, restored = false, restorationBlocked = false, memoryMeasured = false,
+        configurationChanged = false, targetsChanged = false}
     local clock, scale = SelectClock(metadata)
     if not clock then return nil, "Action bar profiling clock is unavailable." end
     local handle = {operations = {}, metadata = metadata}
@@ -272,17 +287,46 @@ local function Stop(handle)
         return false, "Invalid or stopped action bar profiling handle."
     end
     local run = handle.capture
-    Cleanup(run)
+    -- Final inspection and teardown are outside the measured gameplay scope.
+    run.active = false
     local resolved, descriptor, failure = pcall(Resolve)
     if resolved and descriptor then
         handle.metadata["end"] = Snapshot(descriptor)
-        if handle.metadata.start.targetCount ~= handle.metadata["end"].targetCount then
+        local changed = table.getn(descriptor.targets) ~= table.getn(run.records)
+        if not changed then
+            for key in pairs(descriptor.targets) do
+                if type(key) ~= "number" or key < 1 or key > table.getn(run.records) or key ~= math.floor(key) then
+                    changed = true
+                    break
+                end
+            end
+        end
+        if not changed then
+            for index, record in ipairs(run.records) do
+                local target = descriptor.targets[index]
+                if type(target) ~= "table" or target.name ~= record.name or target.kind ~= record.kind or
+                    target.owner ~= record.owner or target.key ~= record.key or
+                    target.frame ~= record.frame or target.script ~= record.script or target.results ~= 0 or
+                    target.parameters ~= (record.kind == "function" and 2 or 0) then
+                    changed = true
+                    break
+                end
+            end
+        end
+        if changed then
             handle.metadata.targetsChanged, handle.metadata.partial = true, true
+        end
+        local first, last = handle.metadata.start, handle.metadata["end"]
+        if first.customRevision ~= last.customRevision or first.customConfiguredCount ~= last.customConfiguredCount then
+            handle.metadata.configurationChanged, handle.metadata.partial = true, true
         end
     else
         handle.metadata.partial, handle.metadata.endStateUnavailable = true, true
         handle.metadata.endStateError = tostring(resolved and failure or descriptor)
     end
+    -- Inspect identity before releasing the hook records; cleanup still runs
+    -- when the final descriptor is unavailable or malformed.
+    Cleanup(run)
     handle.capture, run.handle = nil, nil
     active = nil
     if handle.metadata.restoreFailures > 0 then return false, "Action bar profiling targets could not be restored. Reload the UI before recording again." end
