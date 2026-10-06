@@ -693,7 +693,8 @@ function Performance.Create(parent,options)
     end
     local function AddCapturedState(label,captured)
         local fields={{"Active","active"},{"Requested","requested"},{"Event subscriptions","subscribed"},
-            {"Frames initialized","framesInitialized"},{"Product stopped","runtimeStopped"},{"Setting enabled","settingsEnabled"}}
+            {"Frames initialized","framesInitialized"},{"Product stopped","runtimeStopped"},{"Setting enabled","settingsEnabled"},
+            {"Configured extra bars","customConfiguredCount"},{"Visible extra bars","customActiveCount"}}
         for _,field in ipairs(fields) do AddDiagnostic(label..": "..field[1],StateValue(captured and captured[field[2]]),"Product state recorded at the capture boundary; this is not a live frame inspection.") end
     end
     function module:BuildActionBarsItems(session)
@@ -729,6 +730,7 @@ function Performance.Create(parent,options)
             end
             AddDiagnostic("Partial coverage",StateValue(metadata.partial),"Whether the source reported incomplete capture or cleanup coverage.")
             AddDiagnostic("Targets changed",StateValue(metadata.targetsChanged),"Whether the source reported that its registered target set changed during the capture.")
+            AddDiagnostic("Bar setup changed",StateValue(metadata.configurationChanged),"Whether extra bars were added, removed or individually shown/hidden during recording; configure the bars before starting a comparison.")
             if session.stopped then
                 AddDiagnostic("Wrappers restored",StateValue(metadata.restored),"Whether the source restored its temporary wrappers after Stop.")
                 AddDiagnostic("Restoration blocked",StateValue(metadata.restorationBlocked),"A replaced entry point may prevent safe restoration; the profiler does not overwrite a foreign replacement.")

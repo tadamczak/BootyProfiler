@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0-dev.5 — 2026-10-06
+
+- Include initialized custom action bars in Profile Action Bars, keeping disabled bars' zero counters in exports.
+- Record custom-bar state and mark configuration or target changes during a recording as partial coverage.
+
 ## 1.0.0-dev.4 — 2026-10-06
 
 - Add Profile Action Bars to measure its event handler and native cooldown callbacks with all scoped counters retained in exports.
