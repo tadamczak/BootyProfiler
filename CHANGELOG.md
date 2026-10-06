@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0-dev.9 — 2026-10-06
+
+- Mark Profile Action Bars as partial when optional pet or form bars are configured outside its ordinary-button scope.
+
 ## 1.0.0-dev.8 — 2026-10-06
 
 - Explain that toggling action-bar titles, key labels or counts also changes the recording setup.

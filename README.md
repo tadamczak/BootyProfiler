@@ -34,3 +34,5 @@ If the client refuses to restore a callback when stopping, BootyProfiler disable
 Callback timings prefer available debugprofilestop differences, without resetting its shared counter, and fall back to GetTime. Timing resolution and profiler overhead require native verification; interception itself adds cost. Heap changes remain global and do not establish owned memory or a memory leak. Retained frames with callbacks and callback records are capped at 4096; inert frames do not consume frame capacity. Source-addon rows are capped at 256, slow calls at 64, samples at 600 and login stages at 256 with pages of 50. Export retains the 128 highest callback records by heap growth when memory capture was enabled, otherwise by self time. Partial or truncated coverage is shown explicitly.
 
 Settings and Live Monitor open above the window that launched them; separate Booty addon windows keep a consistent foreground order.
+
+Profile Action Bars covers ordinary main and custom action buttons. Configured pet or form bars make this scoped recording partial because their callbacks are outside that scope.
