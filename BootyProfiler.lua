@@ -21,12 +21,19 @@ function Product.Initialize() return P.Core.Settings.Ensure() end
 function Product.Start() return P.Core.Settings.Ensure() ~= nil end
 function Product.GetSettings() return P.Core.Settings.Describe() end
 function Product.GetDatabase() return P.Core.Settings.Ensure() end
+local function InactiveReason()
+    if Product.stopped then return "This addon is paused. Resume it in Booty Suite Plugins." end
+    return Product.failure
+end
 function Product.GetController(host)
+    if InactiveReason() then return nil end
     return controllers[host] or host.GetView and host.GetView("profiler")
 end
 local function Action(host, name, show)
     return function()
-        if show then host.OpenView("profiler") end
+        local failure = InactiveReason()
+        if failure then if host.Print then host.Print(failure) end; return false, failure end
+        if show and not host.OpenView("profiler") then return false end
         local controller = Product.GetController(host)
         if not controller then if host.Print then host.Print("Profiler view is unavailable.") end; return false end
         if name == "all" then return controller:SelectTab("All Addons") end
@@ -37,6 +44,7 @@ local function Action(host, name, show)
     end
 end
 function Product.GetQuickMenu(host)
+    local available = InactiveReason() == nil
     local state = P.GetState()
     local controller = controllers[host]
     local db = P.Core.Settings.Ensure()
@@ -45,13 +53,13 @@ function Product.GetQuickMenu(host)
     local conflict = controller and controller.HasCaptureConflict and controller:HasCaptureConflict() or false
     local foreignSession = controller and controller.HasForeignProfileSession and controller:HasForeignProfileSession() or false
     local advanced = {
-        { text = state.recording and "Stop" or "Start", icon = state.recording and "stop" or "start", enabled = not conflict, action = Action(host, "startStop") },
-        { text = "Reset", icon = "reset", enabled = state.session ~= nil and not foreignSession, action = Action(host, "reset") },
-        { text = "Export", icon = "save", enabled = state.session ~= nil and not state.recording and not foreignSession, action = Action(host, "export") },
+        { text = state.recording and "Stop" or "Start", icon = state.recording and "stop" or "start", enabled = available and not conflict, action = Action(host, "startStop") },
+        { text = "Reset", icon = "reset", enabled = available and state.session ~= nil and not foreignSession, action = Action(host, "reset") },
+        { text = "Export", icon = "save", enabled = available and state.session ~= nil and not state.recording and not foreignSession, action = Action(host, "export") },
     }
     if not controller or controller.tab ~= "Action Bars" then
         table.insert(advanced, { text = memory and "Memory: ON" or "Memory: OFF", icon = "memory", checked = memory and true or false,
-            enabled = not state.recording, keepOpen = true, action = Action(host, "memory") })
+            enabled = available and not state.recording, keepOpen = true, action = Action(host, "memory") })
     end
     if not host.standalone then table.insert(advanced, { text = "Profile Booty", icon = "guild_stats", action = Action(host, "booty", true) }) end
     table.insert(advanced, { text = "Profile All", icon = "groups", action = Action(host, "all", true) })
@@ -60,9 +68,9 @@ function Product.GetQuickMenu(host)
     end
     table.insert(advanced, { text = "Analyze Login", icon = "analyze", action = Action(host, "login", true) })
     local items = {
-        { text = "Live Monitor", icon = "monitor", enabled = P.LiveMonitor ~= nil, action = Action(host, "live") },
-        { text = "Advanced Profiler", icon = "performance", children = advanced },
-        { text = "Health Check", icon = "health", enabled = P.GetLastHealthReport ~= nil, action = Action(host, "health", true) },
+        { text = "Live Monitor", icon = "monitor", enabled = available and P.LiveMonitor ~= nil, action = Action(host, "live") },
+        { text = "Advanced Profiler", icon = "performance", enabled = available, children = advanced },
+        { text = "Health Check", icon = "health", enabled = available and P.GetLastHealthReport ~= nil, action = Action(host, "health", true) },
     }
     if host.standalone then
         table.insert(items, { text = "Settings", icon = "settings", action = host.OpenSettings })
@@ -100,6 +108,8 @@ function Product.OnHostReady(host)
     SlashCmdList.BOOTYPROFILER = function(message)
         local command = string.lower(string.gsub(tostring(message or ""), "^%s*(.-)%s*$", "%1"))
         if command == "settings" then return host.OpenSettings() end
+        local failure = InactiveReason()
+        if failure then if host.Print then host.Print(failure) end; return false, failure end
         if command == "live" then return Action(host, "live")() end
         if command == "all" then return Action(host, "all", true)() end
         if command == "actionbars" then return Action(host, "actionbars", true)() end

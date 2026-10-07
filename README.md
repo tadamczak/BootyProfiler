@@ -12,6 +12,8 @@ Install BootyProfiler and BootyLib in Interface/AddOns/. Restart the game after 
 
 Use **Profile > General** to add, save, load, delete or export settings profiles in either standalone mode or Suite. **Reset** restores preferences while retaining recorded exports and login reports.
 
+When paused in Booty Suite Plugins, commands and previously opened menus cannot restart Live Monitor or profiling. Use Resume before opening them again.
+
 The top toolbar contains **Live Monitor**, **Advanced Profiler** and **Health Check**. Advanced Profiler opens **Profile All** or **Analyze Login**. In Booty Suite, it also offers **Profile Booty** and a right-aligned **Disable** action; installed but disabled products can be enabled in **Plugins** after a UI reload. In a profile view, **Start** changes to **Stop** during recording. Booty starts the lighter selected-operation capture; All also intercepts frame callbacks. Changing views does not change a recording. Each profile shows its matching capture status and last-scan date/duration. While another profile is recording, controls are grey; return to that profile to stop it. Reset and Export act on the selected profile's report. Disable stops recording, removes owned hooks and disables BootyProfiler with a UI reload. Reload waits until other Booty products have no active session. Opening a view or Live Monitor does not start advanced recording; normal recording stays stopped after reload.
 
 - **Booty:** selected Booty entry points, count, total/average/maximum measured time, signed global heap deltas and the last 64 calls lasting at least 5 ms.

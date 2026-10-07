@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0-dev.10 — 2026-10-07
+
+- Keep cached slash commands and quick-menu actions paused until the product is explicitly resumed.
+
 ## 1.0.0-dev.9 — 2026-10-06
 
 - Mark Profile Action Bars as partial when optional pet or form bars are configured outside its ordinary-button scope.
