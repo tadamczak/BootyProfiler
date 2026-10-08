@@ -3,9 +3,9 @@ local P = BootyProfiler
 local Capture = {}
 P.Core.ProductCapture = Capture
 local active, restorationBlocked
-local TARGET_LIMIT, MODEL_LIMIT, SLOW_THRESHOLD, STACK_LIMIT = 73, 72, 0.005, 64
+local TARGET_LIMIT, MODEL_LIMIT, SLOW_THRESHOLD, STACK_LIMIT = 121, 120, 0.005, 64
 local StockAssert = assert
-local COVERAGE = "Explicit BootyActionBars event entry and existing main/custom cooldown OnUpdateModel scripts (up to 73 targets); pet and stance bars are excluded. Self time excludes nested scoped targets, inclusive time retained separately. Not total addon CPU or owned memory; targets fixed at Start."
+local COVERAGE = "Explicit BootyActionBars event entry and existing main/custom cooldown OnUpdateModel scripts (up to 121 targets); pet and stance bars are excluded. Self time excludes nested scoped targets, inclusive time retained separately. Not total addon CPU or owned memory; targets fixed at Start."
 
 local function Finite(value)
     return type(value) == "number" and value == value and value > -1e300 and value < 1e300
@@ -33,7 +33,7 @@ local function Resolve()
         if type(descriptor[key]) ~= "boolean" then return nil, "Invalid BootyActionBars profiling state." end
     end
     if not OptionalInteger(descriptor.customRevision, 9007199254740991) or
-        not OptionalInteger(descriptor.customConfiguredCount, 5) or not OptionalInteger(descriptor.customActiveCount, 5) or
+        not OptionalInteger(descriptor.customConfiguredCount, 9) or not OptionalInteger(descriptor.customActiveCount, 9) or
         (descriptor.customActiveCount or 0) > (descriptor.customConfiguredCount or 0) then
         return nil, "Invalid BootyActionBars custom profiling state."
     end
