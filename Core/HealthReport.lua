@@ -3,9 +3,9 @@
 local P = BootyProfiler
 local Report = {}
 P.HealthReport = Report
-local FINDING_LIMIT, SAMPLE_LIMIT, DROP_LIMIT, CALLBACK_LIMIT, MOS_LIMIT = 8, 600, 64, 4096, 128
+local FINDING_LIMIT, SAMPLE_LIMIT, DROP_LIMIT, CALLBACK_LIMIT, OPERATION_LIMIT = 8, 600, 64, 4096, 128
 Report.limits = { findings = FINDING_LIMIT, samples = SAMPLE_LIMIT, drops = DROP_LIMIT,
-    callbacks = CALLBACK_LIMIT, operations = MOS_LIMIT }
+    callbacks = CALLBACK_LIMIT, operations = OPERATION_LIMIT }
 local rules = P.Health and P.Health.thresholds
 
 local function Valid(value)
@@ -16,6 +16,11 @@ local function Text(value, limit)
     if type(value) ~= "string" then return nil end
     value = string.gsub(string.sub(value, 1, limit or 120), "[%c]", " ")
     return value ~= "" and value or nil
+end
+local function RecordedScope(value)
+    -- Historical reports remain readable; new report labels use the current brand.
+    if value == "MOS" then return "Booty" end
+    return Text(value, 32)
 end
 local function Format(value, unit)
     if not Valid(value) then return "unavailable" end
@@ -106,11 +111,11 @@ local function TopCallback(callbacks)
     end
     return best, math.max(0, bestTime), longest, longestPeak
 end
-local function TopMOS(session)
+local function TopOperation(session)
     if type(session.operations) ~= "table" then return nil, 0, 0 end
     local count, best, bestTime, bestName, reads = 0, nil, 0, nil, 0
     local key, item = next(session.operations)
-    while key ~= nil and reads < MOS_LIMIT do
+    while key ~= nil and reads < OPERATION_LIMIT do
         if type(item) == "table" then
             count = count + Count(item.count)
             local time = Number(item.time)
@@ -145,7 +150,7 @@ function Report.Build(session, completed)
         return report
     end
     report.available, report.elapsed = true, elapsed
-    report.date, report.scope = Text(session.capturedDate, 32), session.callbacksRequested == true and "All Addons" or Text(session.sourceName, 32) or "MOS"
+    report.date, report.scope = Text(session.capturedDate, 32), session.callbacksRequested == true and "All Addons" or RecordedScope(session.sourceName) or "Booty"
     report.code, report.status, report.summary = "insufficient", "Not enough data", "Record at least five seconds of gameplay, then Stop."
     report.coverage = report.scope == "All Addons" and "Recorded frame callbacks; sampled FPS, latency and shared Lua memory."
         or "Selected Booty operations; sampled FPS, latency and shared Lua memory."
@@ -291,13 +296,13 @@ function Report.Build(session, completed)
             "The client returned readings that could not be used. They were skipped rather than counted as zero time or memory.",
             "Open Technical details to locate the failed readings. Stop capture if failures continue and use the remaining supported Live Monitor readings.", 1)
     end
-    local topMOS, timeMOS, callsMOS, nameMOS = TopMOS(session)
-    if topMOS and elapsed > 0 and timeMOS / elapsed >= 0.02 then
-        Add(report, "mos", "Inspect a Booty operation", (nameMOS or "Recorded operation") .. ": " .. Format(timeMOS, " s recorded time") .. ", " .. Format(Number(topMOS.maxTime) and topMOS.maxTime * 1000, " ms longest call") .. ".",
+    local topOperation, operationTime, operationCalls, operationName = TopOperation(session)
+    if topOperation and elapsed > 0 and operationTime / elapsed >= 0.02 then
+        Add(report, "booty", "Inspect a Booty operation", (operationName or "Recorded operation") .. ": " .. Format(operationTime, " s recorded time") .. ", " .. Format(Number(topOperation.maxTime) and topOperation.maxTime * 1000, " ms longest call") .. ".",
             "This selected Booty action used noticeable recorded time. Its timer can include interruptions and does not cover the whole addon.",
             "Close unused Booty pages and avoid repeated manual refreshes. Give the operation above and this exported scan to the Booty maintainer for a focused code check.", 2)
-    elseif callsMOS > 0 and not topMOS then
-        Add(report, "mos-clock", "Booty time below clock precision", callsMOS .. " selected Booty calls were recorded without a positive elapsed reading.",
+    elseif operationCalls > 0 and not topOperation then
+        Add(report, "booty-clock", "Booty time below clock precision", operationCalls .. " selected Booty calls were recorded without a positive elapsed reading.",
             "The calls were counted without a positive duration. These readings cannot distinguish tiny calls from missing timing.",
             "Check Calls for frequently repeated Booty actions. Use recorded frame pauses to investigate freezes rather than ranking these calls by zero duration.", 1)
     end

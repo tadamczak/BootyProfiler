@@ -187,7 +187,7 @@ function P.Start(options)
     local callbacksRequested = type(options) == "table" and options.callbacks and true or false
     local sourceName
     if type(options) == "table" then sourceName = options.source end
-    if sourceName == nil then sourceName = sources.Booty and "Booty" or "MOS" end
+    if sourceName == nil then sourceName = "Booty" end
     local source, now = sourceName and sources[sourceName] or nil, Now()
     if not source and (sourceName ~= false or not callbacksRequested) then return false, tostring(sourceName or "Selected") .. " profiling source is unavailable." end
     if not now then return false, "Client clock is unavailable." end

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0-dev.12 — 2026-10-09
+
+- Use Booty labels in current profiles and keep previous recorded reports readable.
+
 ## 1.0.0-dev.11 — 2026-10-08
 
 - Include all ten ordinary action bars in Profile Action Bars, up to121 explicit targets, while retaining capture restoration and partial-coverage checks.

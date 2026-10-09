@@ -41,7 +41,12 @@ local function CompareHeapRise(a,b)
     return (a.heapRise or 0)>(b.heapRise or 0)
 end
 Performance.Profiles={}
-function Performance.Profiles.IsTab(tab) return tab=="MOS" or tab=="All Addons" or tab=="Action Bars" end
+function Performance.Profiles.IsTab(tab) return tab=="Booty" or tab=="All Addons" or tab=="Action Bars" end
+local function RecordedSource(name)
+    -- Reports captured by the previous product may retain this source tag.
+    if name=="MOS" then return "Booty" end
+    return name
+end
 function Performance.Profiles.IsAvailable(provider)
     return provider and type(provider.HasActionBarsCapture)=="function" and provider.HasActionBarsCapture() and true or false
 end
@@ -52,7 +57,7 @@ function Performance.Profiles.Matches(session,tab,standalone)
     if tab=="Action Bars" then expected="Action Bars" elseif standalone then expected=false end
     if tab=="Action Bars" then return session.sourceName==expected end
     -- Older Booty reports did not identify their selected-operation source.
-    return session.sourceName==nil or session.sourceName==expected or tab=="MOS" and session.sourceName=="MOS"
+    return session.sourceName==nil or RecordedSource(session.sourceName)==expected
 end
 local rowColor = {1,1,1}
 local sectionColor={0.015,0.015,0.015}
@@ -777,7 +782,7 @@ function Performance.Create(parent,options)
             AddItem("message",state.recording and "Another profile is recording. Stop it before starting this profile." or "No scan for this profile. Press Start to record it.")
         elseif self.tab=="Action Bars" then
             self:BuildActionBarsItems(session)
-        elseif self.tab=="MOS" then
+        elseif self.tab=="Booty" then
             local calls,total,heap,_,_,entries,peak=self:GetSessionOperations()
             AddMetric("Measured calls",calls,hints.calls);AddMetric("Measured time",Duration(total),hints.total)
             AddMetric("Peak call time",calls>0 and Duration(peak) or "-",hints.peak);AddMetric("Average call time",calls>0 and Duration(total/calls) or "-",hints.average)
@@ -804,7 +809,7 @@ function Performance.Create(parent,options)
         if self.tab=="All Addons" and (not session or session.callbacksRequested) then
             self:BuildAddonMemoryItems(session,state)
         end
-        if compatible and self.tab~="Action Bars" and (self.tab=="MOS" or session.callbacksRequested) and AddSection("technical") then self:BuildTechnicalItems(session) end
+        if compatible and self.tab~="Action Bars" and (self.tab=="Booty" or session.callbacksRequested) and AddSection("technical") then self:BuildTechnicalItems(session) end
         for index=table.getn(self.items),self.itemCount+1,-1 do table.remove(self.items,index) end
     end
     local function EnsureRow(index)
@@ -827,7 +832,7 @@ function Performance.Create(parent,options)
         table.insert(module.rows,row);return row
     end
     local function ResetRow(row,item,width)
-        row.mosTableRowHover:SetAlpha(0.07)
+        row.bootyTableRowHover:SetAlpha(0.07)
         row:SetWidth(width);row.label:ClearAllPoints();row.label:SetPoint("TOPLEFT",row,"TOPLEFT",8,-6)
         row.label:SetWidth(math.max(1,width-16));row.label:SetHeight(0);FontSize(row.label,11);row.label:SetJustifyV("TOP")
         row.label:SetText(item.text);row.label:SetTextColor(1,1,1);row.label:Show()
@@ -840,8 +845,8 @@ function Performance.Create(parent,options)
         row.reportTitle,row.reportHint,row.reportSchema=item.text,item.hint,nil
         if row.label.SetNonSpaceWrap then row.label:SetNonSpaceWrap(true) end
         row:EnableMouse(item.hint~=nil)
-        UI.SetRowColor(row,rowColor,0);row.mosTableRowSelection:Hide();row.mosTableRowHover:Hide();UI.SetProjectButtonOutline(row,false)
-        row.mosTableRowEven=false;row.mosTableRowSelected=false
+        UI.SetRowColor(row,rowColor,0);row.bootyTableRowSelection:Hide();row.bootyTableRowHover:Hide();UI.SetProjectButtonOutline(row,false)
+        row.bootyTableRowEven=false;row.bootyTableRowSelected=false
     end
     function module:MeasureFilter(row,item,width)
         local check=row.filterCheck
@@ -893,8 +898,8 @@ function Performance.Create(parent,options)
         if not row.previous then
             row.previous=UI.CreateButton(row,nil,"Previous",74,24);row.next=UI.CreateButton(row,nil,"Next",56,24)
             row.pagerFlow={row.previous,row.next}
-            row.previous.mosFlowWidth=74;row.next.mosFlowWidth=56
-            row.previous.mosFlowFitLabel=true;row.next.mosFlowFitLabel=true
+            row.previous.bootyFlowWidth=74;row.next.bootyFlowWidth=56
+            row.previous.bootyFlowFitLabel=true;row.next.bootyFlowFitLabel=true
             row.previous.direction=-1;row.next.direction=1
             row.previous:SetScript("OnClick",PagerClick);row.next:SetScript("OnClick",PagerClick)
         end
@@ -1037,12 +1042,12 @@ function Performance.Create(parent,options)
                     row.label:SetTextColor(unpack(UI.Theme.colors.goldText));row.label:ClearAllPoints();row.label:SetPoint("TOPLEFT",row,"TOPLEFT",8,-8);row.label:SetWidth(math.max(1,cardWidth-16))
                     local labelHeight=UI.MeasureTextHeight(row.label,cardWidth-16)
                     row.detail:ClearAllPoints();row.detail:SetPoint("TOPLEFT",row,"TOPLEFT",8,-labelHeight-12);row.detail:SetWidth(math.max(1,cardWidth-16))
-                    row.detail.mosFitFontSize=FontSize(row.detail,15);row.detail:SetText(item.value)
+                    row.detail.bootyFitFontSize=FontSize(row.detail,15);row.detail:SetText(item.value)
                     if item.severity~=nil then row.detail:SetTextColor(unpack(healthColors[item.severity+1] or healthColors[1])) else row.detail:SetTextColor(1,1,1) end
                     row.detail:Show()
                     UI.FitButtonLabel(row.detail,math.max(1,cardWidth-16));row.detail:SetHeight(18);row.detail:SetJustifyV("MIDDLE")
                     height=math.max(height,labelHeight+18+16)
-                    UI.SetRowColor(row,rowColor,0.11);row.mosTableRowHover:SetAlpha(0.08);row.mosFlowWidth=cardWidth;row:Show()
+                    UI.SetRowColor(row,rowColor,0.11);row.bootyTableRowHover:SetAlpha(0.08);row.bootyFlowWidth=cardWidth;row:Show()
                     count=count+1
                     if count<=table.getn(flow) then flow[count]=row else table.insert(flow,row) end
                     index=index+1
@@ -1086,17 +1091,17 @@ function Performance.Create(parent,options)
                     end
                     if toggle:GetParent()~=row then toggle:SetParent(row) end
                     -- Reused rows must not carry a preceding table's stripe or hover.
-                    UI.SetRowColor(row,rowColor,0.045);row.mosTableRowHovered=nil
+                    UI.SetRowColor(row,rowColor,0.045);row.bootyTableRowHovered=nil
                     toggle.sectionHovered=nil;UI.SetProjectButtonOutline(toggle,true)
                     local nested=sections[name].nested
                     local sectionHeight=nested and 24 or 28
                     toggle:ClearAllPoints();toggle:SetPoint("TOPLEFT",row,"TOPLEFT",0,0);toggle:SetWidth(rowWidth);toggle:SetHeight(sectionHeight)
-                    toggle.mosFitFontSize=FontSize(toggle.label,nested and 12 or 13)
+                    toggle.bootyFitFontSize=FontSize(toggle.label,nested and 12 or 13)
                     toggle.label:SetText((module:IsSectionExpanded(name) and "- " or "+ ")..item.text..(item.value~=nil and " ("..item.value..")" or ""))
                     UI.FitButtonLabel(toggle,math.max(1,rowWidth-32));toggle.label:SetJustifyH("LEFT")
                     toggle.indicator:ClearAllPoints();toggle.indicator:SetPoint("LEFT",toggle,"LEFT",8,0)
                     toggle.label:ClearAllPoints();toggle.label:SetPoint("LEFT",toggle,"LEFT",20,0)
-                    toggle.label.mosAccordionPrefixInset=20
+                    toggle.label.bootyAccordionPrefixInset=20
                     toggle.rule:Hide();toggle:SetExpanded(module:IsSectionExpanded(name));toggle:Show();height=sectionHeight
                     UI.SetRowColor(toggle,sectionColor,1)
                 else row.label:SetTextColor(0.78,0.78,0.78) end
@@ -1112,7 +1117,7 @@ function Performance.Create(parent,options)
     local function CreateProfileOption(profile)
         local option=UI.CreateButton(page.advancedMenu,nil,profile[1],182,26);UI.StyleActionButton(option)
         option.profile=profile[2];option:SetScript("OnClick",ProfileClick)
-        option.mosActionAlign="LEFT";option.mosLabelJustify="LEFT";if option.label.SetWordWrap then option.label:SetWordWrap(false) end
+        option.bootyActionAlign="LEFT";option.bootyLabelJustify="LEFT";if option.label.SetWordWrap then option.label:SetWordWrap(false) end
         UI.SetActionButtonIcon(option,profile[3]);return option
     end
     function module:UpdateProfileMenu()
@@ -1149,7 +1154,7 @@ function Performance.Create(parent,options)
         page.loginButton=UI.CreateButton(page.controls,nil,"Analyze Login",154,26)
         page.tabFlow={page.monitorButton,page.advancedButton,page.healthButton};page.visibleTabs={};page.actions={page.startButton,page.resetButton,page.exportButton,page.memoryModeButton,page.callbackViewButton,page.memoryButton,page.refreshButton,page.loginButton};page.flow={}
         for _,flow in ipairs({page.tabFlow,page.actions,page.enableButton and {page.enableButton} or emptyEntries}) do for _,button in ipairs(flow) do
-            button.mosFlowWidth=button:GetWidth();UI.StyleActionButton(button)
+            button.bootyFlowWidth=button:GetWidth();UI.StyleActionButton(button)
             if button.label.SetWordWrap then button.label:SetWordWrap(false) end
         end end
         UI.SetActionButtonIcon(page.advancedButton,"performance");UI.SetActionButtonIcon(page.monitorButton,"monitor");UI.SetActionButtonIcon(page.healthButton,"health");UI.SetActionButtonIcon(page.loginButton,"start")
@@ -1158,7 +1163,7 @@ function Performance.Create(parent,options)
         UI.SetActionButtonIcon(page.exportButton,"save");UI.SetActionButtonIcon(page.refreshButton,"refresh");UI.SetActionButtonIcon(page.memoryButton,"memory")
         UI.SetActionButtonIcon(page.memoryModeButton,"settings");UI.SetActionButtonIcon(page.callbackViewButton,"list")
         local profiles=options.standalone and {{"Profile All","All Addons","groups"},{"Analyze Login","Analyze Login","analyze"}}
-            or {{"Profile Booty","MOS","guild_stats"},{"Profile All","All Addons","groups"},{"Analyze Login","Analyze Login","analyze"}}
+            or {{"Profile Booty","Booty","guild_stats"},{"Profile All","All Addons","groups"},{"Analyze Login","Analyze Login","analyze"}}
         page.advancedMenu=UI.CreateDropdownPanel(page.tabs,page.advancedButton,190,6+table.getn(profiles)*30)
         for index,profile in ipairs(profiles) do
             local option=CreateProfileOption(profile)
@@ -1210,17 +1215,17 @@ function Performance.Create(parent,options)
         local available=math.max(1,width-16)
         local required,count=0,0
         for _,button in ipairs(page.tabFlow) do if button:IsShown() then
-            required=required+button.mosFlowWidth+8;count=count+1
+            required=required+button.bootyFlowWidth+8;count=count+1
             if count<=table.getn(page.visibleTabs) then page.visibleTabs[count]=button else table.insert(page.visibleTabs,button) end
         end end
         for index=table.getn(page.visibleTabs),count+1,-1 do table.remove(page.visibleTabs,index) end
         if required>0 then required=required-8 end
         if not page.enableButton then return UI.LayoutFlow(page.tabs,page.visibleTabs,8,8,available,8)+8 end
-        local inline=count==0 or required+page.enableButton.mosFlowWidth+8<=available
-        local bottom=UI.LayoutFlow(page.tabs,page.visibleTabs,8,8,math.max(1,inline and available-page.enableButton.mosFlowWidth-8 or available),8)
+        local inline=count==0 or required+page.enableButton.bootyFlowWidth+8<=available
+        local bottom=UI.LayoutFlow(page.tabs,page.visibleTabs,8,8,math.max(1,inline and available-page.enableButton.bootyFlowWidth-8 or available),8)
         local actionTop=inline and 8 or bottom+8
         page.enableButton:ClearAllPoints();page.enableButton:SetPoint("TOPRIGHT",page.tabs,"TOPRIGHT",-8,-actionTop)
-        page.enableButton:SetWidth(math.min(page.enableButton.mosFlowWidth,available));UI.FitButtonLabel(page.enableButton,math.max(1,page.enableButton:GetWidth()-16))
+        page.enableButton:SetWidth(math.min(page.enableButton.bootyFlowWidth,available));UI.FitButtonLabel(page.enableButton,math.max(1,page.enableButton:GetWidth()-16))
         return math.max(bottom,actionTop+26)+8
     end
     local function MeasureHeader(width)
@@ -1341,7 +1346,7 @@ function Performance.Create(parent,options)
         UI.SetButtonEnabled(page.callbackViewButton,self.measureMemory or state.session and state.session.callbackMemoryRequested)
         if self.captureConflict then for _,button in ipairs(page.actions) do UI.SetButtonEnabled(button,false) end end
         local capture=state.session
-        local viewing=self.tab=="MOS" and "Profile Booty" or self.tab=="All Addons" and "Profile All" or self.tab
+        local viewing=self.tab=="Booty" and "Profile Booty" or self.tab=="All Addons" and "Profile All" or self.tab
         local detail="Ready"
         if self.tab=="Health Check" then
             local report=self.healthReport
@@ -1375,8 +1380,7 @@ function Performance.Create(parent,options)
         if module.provider and module.provider.LoginMemory then module.provider.LoginMemory.SetListener(page:IsVisible() and module.tab=="Analyze Login" and Updated or nil) end
     end
     function module:SelectTab(tab)
-        if tab=="Booty" then tab="MOS" end
-        if options.standalone and tab=="MOS" then return false end
+        if options.standalone and tab=="Booty" then return false end
         if tab=="Action Bars" and not self:HasActionBarsCapture() then return false end
         if not Performance.Profiles.IsTab(tab) and tab~="Analyze Login" and tab~="Health Check" then return false end
         self:ClearTableViews();self:CancelFamilyJob();self.familyModel=nil;self.tab=tab
@@ -1565,7 +1569,7 @@ function Performance.Create(parent,options)
             local profile=self.lastProfile
             if not profile then
                 local session=provider.GetState().session
-                profile=session and (session.sourceName=="Action Bars" and "Action Bars" or session.callbacksRequested and "All Addons" or "MOS") or "All Addons"
+                profile=session and (session.sourceName=="Action Bars" and "Action Bars" or session.callbacksRequested and "All Addons" or "Booty") or "All Addons"
             end
             if options.standalone and profile~="Action Bars" then profile="All Addons" end
             if not self:SelectTab(profile) then return false end
